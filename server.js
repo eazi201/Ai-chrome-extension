@@ -13,7 +13,8 @@ app.use(cors({
 app.use(express.json());
 
 const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
-const API_URL = "https://api-inference.huggingface.co/models/gpt2"; // You can change this to other models
+// Changed to a question-answering model
+const API_URL = "https://api-inference.huggingface.co/models/deepset/roberta-base-squad2";
 
 app.get('/', (req, res) => {
   res.json({ message: "Server is running. Use POST to interact with the AI." });
@@ -28,7 +29,12 @@ app.post('/', async (req, res) => {
 
   try {
     const response = await axios.post(API_URL, 
-      { inputs: text },
+      { 
+        inputs: {
+          question: text,
+          context: "This is a question answering system. Please provide a concise and accurate answer based on the given question."
+        }
+      },
       {
         headers: {
           'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
@@ -37,12 +43,21 @@ app.post('/', async (req, res) => {
       }
     );
 
-    const answer = response.data[0].generated_text;
-    res.json({ answer });
+    console.log('API Response:', JSON.stringify(response.data, null, 2));
+
+    if (response.data && response.data.answer) {
+      res.json({ answer: response.data.answer });
+    } else {
+      res.status(500).json({ error: 'Unexpected response format from AI service' });
+    }
 
   } catch (error) {
-    console.error('Error:', error.response ? error.response.data : error.message);
-    res.status(500).json({ error: 'Failed to fetch AI response' });
+    console.error('Error details:', error.response ? error.response.data : error.message);
+    if (error.response && error.response.status === 429) {
+      res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
+    } else {
+      res.status(500).json({ error: 'Failed to fetch AI response. Please try again.' });
+    }
   }
 });
 
